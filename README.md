@@ -45,6 +45,10 @@ docker-compose up -d           # Start all services
 cd services/ai-agent-service && python -m app.rag.ingestion --sample-data
 ```
 
+## Running Services
+
+See [Operations Guide](docs/OPERATIONS.md) for detailed startup/shutdown procedures, verification checklist, and troubleshooting.
+
 ## Running Tests
 
 ```bash
