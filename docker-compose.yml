@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   api-gateway:
     build: ./services/api-gateway
@@ -7,9 +5,10 @@ services:
       - "3000:3000"
     environment:
       - PORT=3000
+      - AUTH_DISABLED=true
       - JWT_SECRET=healthmap-dev-secret-change-in-prod
       - AI_SERVICE_URL=http://ai-agent-service:8000
-      - PATIENT_SERVICE_URL=http://mock-patient-service:8080
+      - PATIENT_SERVICE_URL=http://patient-service:8080
       - CORS_ORIGIN=http://localhost:5173
     depends_on:
       - ai-agent-service
@@ -23,7 +22,7 @@ services:
       - APP_ENV=development
       - DEBUG=true
       - PORT=8000
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - PINECONE_API_KEY=${PINECONE_API_KEY}
       - PINECONE_INDEX_NAME=healthmap-clinical
       - SUPABASE_URL=${SUPABASE_URL}
@@ -31,8 +30,9 @@ services:
       - PATIENT_SERVICE_URL=http://patient-service:8080
       - LAB_SERVICE_URL=http://patient-service:8080
       - MEDICATION_SERVICE_URL=http://patient-service:8080
-      - LLM_MODEL=gpt-4o
+      - LLM_MODEL=gemini-2.5-flash
       - LLM_TEMPERATURE=0.1
+      - EMBEDDING_MODEL=models/embedding-001
     restart: unless-stopped
 
   patient-service:

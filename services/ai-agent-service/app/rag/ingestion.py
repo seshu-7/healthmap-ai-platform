@@ -4,7 +4,7 @@ from typing import Optional
 from pathlib import Path
 import tiktoken
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from app.config import get_settings
 
 settings = get_settings()

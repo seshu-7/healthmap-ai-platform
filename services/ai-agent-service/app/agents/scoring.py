@@ -136,9 +136,6 @@ def score_patient_risk(
         scoring_factors.append({"factor": "age>=75", "points": 1, "value": age})
         findings.append(f"Age vulnerability factor: {int(age)} years")
 
-    if not guidelines:
-        data_gaps.append("No guideline snippets retrieved")
-
     score = max(1, min(score, 10))
     level = _risk_level(score)
 

@@ -8,7 +8,10 @@ LABEL service="healthmap-ai-agent"
 WORKDIR /app
 COPY --from=builder /install /usr/local
 COPY app/ ./app/
-RUN useradd -r -s /bin/false appuser && chown -R appuser:appuser /app
+RUN mkdir -p /home/appuser/.mem0 \
+  && useradd -r -d /home/appuser -s /usr/sbin/nologin appuser \
+  && chown -R appuser:appuser /app /home/appuser
+ENV HOME=/home/appuser
 USER appuser
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
   CMD python -c "import httpx; httpx.get('http://localhost:8000/health').raise_for_status()"

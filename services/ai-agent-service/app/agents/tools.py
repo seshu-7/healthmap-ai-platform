@@ -91,11 +91,15 @@ def search_clinical_guidelines(query: str, condition: Optional[str] = None) -> s
     Args:
         query: The clinical question or topic.
         condition: Optional filter (e.g., 'CKD', 'diabetes')."""
-    results = retrieve_guidelines(
-        query=query,
-        condition_filter=condition,
-        top_k=settings.retrieval_top_k,
-    )
+    try:
+        results = retrieve_guidelines(
+            query=query,
+            condition_filter=condition,
+            top_k=settings.retrieval_top_k,
+        )
+    except Exception:
+        # Guideline search is optional for onboarding; fail soft and continue deterministic scoring.
+        return json.dumps({"message": "Guidelines temporarily unavailable."})
     if not results:
         return json.dumps({"message": "No relevant guidelines found."})
     formatted = []

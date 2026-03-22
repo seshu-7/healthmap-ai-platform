@@ -47,7 +47,7 @@ async def health():
 
 @app.get("/ready")
 async def readiness():
-    checks = {"pinecone": bool(settings.pinecone_api_key), "llm": bool(settings.openai_api_key)}
+    checks = {"pinecone": bool(settings.pinecone_api_key), "llm": bool(settings.google_api_key)}
     if not all(checks.values()):
         raise HTTPException(status_code=503, detail={"checks": checks})
     return {"status": "ready", "checks": checks}

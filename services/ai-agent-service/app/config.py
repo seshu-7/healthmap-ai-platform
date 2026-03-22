@@ -4,7 +4,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 from functools import lru_cache
 
-ROOT_ENV_FILE = Path(__file__).resolve().parents[3] / ".env"
+_CONFIG_PATH = Path(__file__).resolve()
+ROOT_ENV_FILE = (
+    _CONFIG_PATH.parents[3] / ".env"
+    if len(_CONFIG_PATH.parents) > 3
+    else _CONFIG_PATH.parents[1] / ".env"
+)
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -22,7 +27,7 @@ class Settings(BaseSettings):
     google_api_key: str = Field(default="", alias="GOOGLE_API_KEY")
     llm_model: str = Field(default="gemini-2.5-flash", alias="LLM_MODEL")
     llm_temperature: float = Field(default=0.1, alias="LLM_TEMPERATURE")
-    embedding_model: str = Field(default="gemini-embedding-001", alias="EMBEDDING_MODEL")
+    embedding_model: str = Field(default="models/embedding-001", alias="EMBEDDING_MODEL")
 
     pinecone_api_key: str = Field(default="", alias="PINECONE_API_KEY")
     pinecone_index_name: str = Field(default="healthmap-clinical", alias="PINECONE_INDEX_NAME")
