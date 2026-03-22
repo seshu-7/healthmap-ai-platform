@@ -1,0 +1,86 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: healthmap
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: ai-agent-service, namespace: healthmap, labels: { app: ai-agent-service } }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: ai-agent-service } }
+  template:
+    metadata: { labels: { app: ai-agent-service } }
+    spec:
+      tolerations: [{ key: ai-workload, operator: Equal, value: "true", effect: NoSchedule }]
+      nodeSelector: { workload: ai-agents }
+      containers:
+        - name: ai-agent-service
+          image: ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/healthmap/ai-agent-service:latest
+          ports: [{ containerPort: 8000 }]
+          env:
+            - { name: APP_ENV, value: production }
+            - { name: OPENAI_API_KEY, valueFrom: { secretKeyRef: { name: healthmap-secrets, key: openai-api-key } } }
+            - { name: PINECONE_API_KEY, valueFrom: { secretKeyRef: { name: healthmap-secrets, key: pinecone-api-key } } }
+            - { name: PINECONE_INDEX_NAME, value: healthmap-clinical }
+            - { name: PATIENT_SERVICE_URL, value: "http://patient-service.healthmap.svc.cluster.local:8080" }
+            - { name: LAB_SERVICE_URL, value: "http://lab-service.healthmap.svc.cluster.local:8080" }
+            - { name: MEDICATION_SERVICE_URL, value: "http://medication-service.healthmap.svc.cluster.local:8080" }
+          resources: { requests: { cpu: 500m, memory: 1Gi }, limits: { cpu: "2", memory: 4Gi } }
+          livenessProbe: { httpGet: { path: /health, port: 8000 }, initialDelaySeconds: 15, periodSeconds: 30 }
+          readinessProbe: { httpGet: { path: /ready, port: 8000 }, initialDelaySeconds: 10, periodSeconds: 10 }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: ai-agent-service, namespace: healthmap }
+spec: { selector: { app: ai-agent-service }, ports: [{ port: 8000, targetPort: 8000 }], type: ClusterIP }
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: { name: ai-agent-hpa, namespace: healthmap }
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: ai-agent-service }
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - { type: Resource, resource: { name: cpu, target: { type: Utilization, averageUtilization: 70 } } }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: api-gateway, namespace: healthmap, labels: { app: api-gateway } }
+spec:
+  replicas: 3
+  selector: { matchLabels: { app: api-gateway } }
+  template:
+    metadata: { labels: { app: api-gateway } }
+    spec:
+      nodeSelector: { workload: general }
+      containers:
+        - name: api-gateway
+          image: ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/healthmap/api-gateway:latest
+          ports: [{ containerPort: 3000 }]
+          env:
+            - { name: JWT_SECRET, valueFrom: { secretKeyRef: { name: healthmap-secrets, key: jwt-secret } } }
+            - { name: AI_SERVICE_URL, value: "http://ai-agent-service.healthmap.svc.cluster.local:8000" }
+            - { name: PATIENT_SERVICE_URL, value: "http://patient-service.healthmap.svc.cluster.local:8080" }
+          resources: { requests: { cpu: 250m, memory: 256Mi }, limits: { cpu: "1", memory: 512Mi } }
+          livenessProbe: { httpGet: { path: /api/v1/health, port: 3000 }, initialDelaySeconds: 10 }
+          readinessProbe: { httpGet: { path: /api/v1/health/ready, port: 3000 }, initialDelaySeconds: 5 }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: api-gateway, namespace: healthmap }
+spec: { selector: { app: api-gateway }, ports: [{ port: 3000, targetPort: 3000 }], type: ClusterIP }
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: healthmap-ingress
+  namespace: healthmap
+  annotations: { kubernetes.io/ingress.class: alb, alb.ingress.kubernetes.io/scheme: internet-facing, alb.ingress.kubernetes.io/target-type: ip }
+spec:
+  rules:
+    - host: api.healthmap.com
+      http:
+        paths:
+          - { path: /, pathType: Prefix, backend: { service: { name: api-gateway, port: { number: 3000 } } } }

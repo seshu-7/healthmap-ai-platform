@@ -1,0 +1,83 @@
+version: "3.9"
+
+services:
+  api-gateway:
+    build: ./services/api-gateway
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - JWT_SECRET=healthmap-dev-secret-change-in-prod
+      - AI_SERVICE_URL=http://ai-agent-service:8000
+      - PATIENT_SERVICE_URL=http://mock-patient-service:8080
+      - CORS_ORIGIN=http://localhost:5173
+    depends_on:
+      - ai-agent-service
+    restart: unless-stopped
+
+  ai-agent-service:
+    build: ./services/ai-agent-service
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_ENV=development
+      - DEBUG=true
+      - PORT=8000
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - PINECONE_API_KEY=${PINECONE_API_KEY}
+      - PINECONE_INDEX_NAME=healthmap-clinical
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - PATIENT_SERVICE_URL=http://patient-service:8080
+      - LAB_SERVICE_URL=http://patient-service:8080
+      - MEDICATION_SERVICE_URL=http://patient-service:8080
+      - LLM_MODEL=gpt-4o
+      - LLM_TEMPERATURE=0.1
+    restart: unless-stopped
+
+  patient-service:
+    build: ./services/patient-service
+    ports:
+      - "8080:8080"
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=healthmap
+      - DB_USERNAME=healthmap
+      - DB_PASSWORD=devpassword
+      - REDIS_HOST=redis
+      - KAFKA_SERVERS=kafka:9092
+      - JWT_SECRET=healthmap-dev-secret-change-in-prod-min-32-chars!!
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+
+  frontend:
+    build: ./services/frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - api-gateway
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=healthmap
+      - POSTGRES_USER=healthmap
+      - POSTGRES_PASSWORD=devpassword
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
+volumes:
+  pgdata:

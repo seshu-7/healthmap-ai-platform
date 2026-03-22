@@ -1,0 +1,64 @@
+name: CI/CD
+on:
+  push: { branches: [main, develop] }
+  pull_request: { branches: [main] }
+
+jobs:
+  test-ai:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: services/ai-agent-service } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install -r requirements.txt
+      - run: pytest tests/ -v --cov=app --cov-report=xml
+
+  test-gateway:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: services/api-gateway } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - run: npm ci
+      - run: npm test -- --coverage
+
+  ai-evals:
+    needs: [test-ai]
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: services/ai-agent-service } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install -r requirements.txt
+      - run: python -m app.evals.eval_runner --ci --threshold 0.80
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for secrets in agent code
+        run: |
+          if grep -rn "sk-\|api_key\s*=\s*[\x27\x22]" services/ai-agent-service/app/agents/ services/ai-agent-service/app/rag/; then
+            echo "Secrets found in code"; exit 1; fi
+          echo "Clean"
+
+  build-deploy:
+    needs: [test-ai, test-gateway, ai-evals, security]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with: { aws-access-key-id: "${{ secrets.AWS_ACCESS_KEY_ID }}", aws-secret-access-key: "${{ secrets.AWS_SECRET_ACCESS_KEY }}", aws-region: us-east-1 }
+      - uses: aws-actions/amazon-ecr-login@v2
+      - run: |
+          docker build -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/healthmap/ai-agent-service:${{ github.sha }} services/ai-agent-service
+          docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/healthmap/ai-agent-service:${{ github.sha }}
+      - run: |
+          aws eks update-kubeconfig --name healthmap-ai-platform --region us-east-1
+          sed -i "s|ACCOUNT_ID|${{ secrets.AWS_ACCOUNT_ID }}|g" infra/k8s/all-manifests.yaml
+          kubectl apply -f infra/k8s/all-manifests.yaml
+          kubectl -n healthmap rollout status deployment/ai-agent-service --timeout=300s
